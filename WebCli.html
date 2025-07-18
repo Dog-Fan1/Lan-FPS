@@ -514,19 +514,22 @@
                             teleporters.push({ mesh: cube, layer: l, r: r, c: c, type: 'l' });
                         }
 
-                        if (char !== '#') {
-                            const floorGeometry = new THREE.PlaneGeometry(BLOCK_SIZE, BLOCK_SIZE);
-                            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-                            floor.rotation.x = -Math.PI / 2;
-                            floor.position.set(x, y_floor - 0.01, z);
-                            scene.add(floor);
+                        // Always render a floor for non-wall cells
+                        const floorGeometry = new THREE.PlaneGeometry(BLOCK_SIZE, BLOCK_SIZE);
+                        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+                        floor.rotation.x = -Math.PI / 2;
+                        // Position the floor slightly above the layer's base to prevent Z-fighting with lower layers
+                        floor.position.set(x, y_floor + 0.005, z);
+                        scene.add(floor);
 
-                            const ceilingGeometry = new THREE.PlaneGeometry(BLOCK_SIZE, BLOCK_SIZE);
-                            const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
-                            ceiling.rotation.x = Math.PI / 2;
-                            ceiling.position.set(x, y_floor + WALL_HEIGHT - 0.5, z);
-                            scene.add(ceiling);
-                        }
+                        // Render a ceiling for all non-wall cells, using floorMaterial for the top layer
+                        const ceilingGeometry = new THREE.PlaneGeometry(BLOCK_SIZE, BLOCK_SIZE);
+                        const currentCeilingMaterial = (l === mazeDepth - 1) ? floorMaterial : ceilingMaterial;
+                        const ceiling = new THREE.Mesh(ceilingGeometry, currentCeilingMaterial);
+                        ceiling.rotation.x = Math.PI / 2;
+                        // Position the ceiling slightly below the layer's top to prevent Z-fighting with upper layers
+                        ceiling.position.set(x, y_floor + WALL_HEIGHT - 0.005, z);
+                        scene.add(ceiling);
                     }
                 }
             }
@@ -1454,4 +1457,3 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
     </script>
 </body>
 </html>
-
