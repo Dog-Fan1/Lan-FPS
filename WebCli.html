@@ -1,0 +1,1436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Layer 3D Maze FPS (Multiplayer)</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #222; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 10;
+            display: block; /* Always visible */
+        }
+
+        #score-display {
+            position: absolute;
+            top: 10px;
+            left: 280px;
+            color: white;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 16px;
+            z-index: 10;
+            min-width: 100px;
+            text-align: center;
+            display: block; /* Always visible */
+        }
+        #message-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 20;
+            display: none; /* Hidden by default */
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5); /* Green glow for win */
+            border: 2px solid green;
+        }
+        #message-box.win {
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+            border: 2px solid green;
+        }
+        #message-box.lose { /* Used for "You Died" */
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+            border: 2px solid red;
+        }
+        #message-box button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        #message-box button:hover {
+            background-color: #0056b3;
+        }
+        #controls-panel {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex; /* Always visible */
+            gap: 10px;
+        }
+        #controls-panel button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        #controls-panel button:hover {
+            background-color: #218838;
+        }
+        #hint-box {
+            position: absolute;
+            bottom: 60px; /* Above controls panel */
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            max-width: 400px;
+            text-align: center;
+            z-index: 15;
+            display: none; /* Hidden by default, shown by JS */
+            box-shadow: 0 0 10px rgba(255, 255, 0, 0.5);
+            border: 1px solid yellow;
+        }
+        #hint-box.loading {
+            animation: pulse 1s infinite alternate;
+        }
+        @keyframes pulse {
+            from { box-shadow: 0 0 10px rgba(255, 255, 0, 0.5); }
+            to { box-shadow: 0 0 20px rgba(255, 255, 0, 0.8); }
+        }
+        #minimap-container {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 5px;
+            border-radius: 8px;
+            z-index: 10;
+            display: block; /* Always visible */
+        }
+        #minimap-canvas {
+            border: 1px solid #aaa;
+            background-color: #333;
+        }
+        /* Updated Crosshair Styles for a simple circle */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 16px;   /* Diameter of the circle */
+            height: 16px;  /* Diameter of the circle */
+            border: 2px solid white; /* White circle outline */
+            border-radius: 50%;
+            z-index: 100;
+            pointer-events: none;
+            box-sizing: border-box;
+            background-color: transparent; /* Ensure the center is transparent */
+            display: block; /* Always visible */
+        }
+        /* Removed ::before and ::after for lines */
+
+        /* Health Bar Styles */
+        #health-bar-container {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 200px;
+            height: 25px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 2px solid white;
+            border-radius: 5px;
+            overflow: hidden;
+            z-index: 10;
+            display: block; /* Always visible */
+        }
+
+        #health-bar-fill {
+            width: 100%;
+            height: 100%;
+            background-color: #00FF00;
+            transition: width 0.2s ease-out, background-color 0.2s ease-out;
+            border-radius: 3px;
+        }
+
+        #connection-panel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 200;
+            box-shadow: 0 0 25px rgba(0, 123, 255, 0.7);
+            display: none; /* Hidden by default in CSS, controlled by JS */
+            flex-direction: column;
+            gap: 15px;
+        }
+        #connection-panel input[type="text"] {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #007bff;
+            background-color: #333;
+            color: white;
+            font-size: 16px;
+            width: 250px;
+        }
+        #connection-panel button {
+            padding: 12px 25px;
+            font-size: 18px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        #connection-panel button:hover {
+            background-color: #0056b3;
+        }
+        #connection-status {
+            font-size: 14px;
+            color: #ccc;
+        }
+        .close-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0 5px;
+        }
+        .close-button:hover {
+            color: #ccc;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <b>Controls:</b><br>
+        W: Backward<br>
+        S: Forward<br>
+        A: Strafe Left<br>
+        D: Strafe Right<br>
+        Space: Teleport Up (on 'L' block)<br>
+        Shift: Run<br>
+        Left Click: Shoot<br>
+        Mouse: Look around<br>
+        Click on screen to lock mouse pointer.
+    </div>
+
+    <div id="health-bar-container">
+        <div id="health-bar-fill"></div>
+    </div>
+    <div id="score-display">Score: 0</div>
+
+    <div id="message-box">
+        <button class="close-button" id="message-box-close-button">&times;</button>
+        <span id="message-text"></span>
+    </div>
+
+    <div id="hint-box">
+        <span id="hint-text"></span>
+    </div>
+
+    <div id="controls-panel">
+        <button id="get-hint-button">Get Hint</button>
+    </div>
+
+    <div id="minimap-container">
+        <canvas id="minimap-canvas" width="200" height="200"></canvas>
+    </div>
+
+    <div id="crosshair"></div>
+
+    <div id="connection-panel">
+        <h2>Connect to Maze Server</h2>
+        <input type="text" id="server-address-input" value="ws://localhost:8765" placeholder="Server Address (e.g., ws://192.168.1.100:8765)">
+        <button id="connect-button">Connect</button>
+        <div id="connection-status">Disconnected</div>
+    </div>
+
+
+    <!-- Three.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // Maze data will now be received from the server
+        let mazeData = [];
+
+        let scene, camera, renderer;
+        let playerBody; // Object3D to handle player's yaw (horizontal rotation)
+        let player; // Player object (position, velocity, currentLayer)
+        let keyboard = {}; // To track key states
+        let mouseSensitivity = 0.002; // How fast the camera rotates with mouse
+        let normalMoveSpeed = 0.1; // Normal walking speed
+        let runMoveSpeed = 0.2;    // Running speed
+        let currentMoveSpeed = normalMoveSpeed; // Current speed
+        let mazeDepth, mazeHeight, mazeWidth; // Dimensions of the 3D maze
+        let walls = []; // Array to store wall meshes for collision
+        let teleporters = []; // Array to store teleporter block positions (L and l)
+        let startPosition = new THREE.Vector3(); // Will be set by server
+        let endPosition = new THREE.Vector3(); // Will be set by server
+
+        let messageBox, messageText, messageBoxCloseButton;
+        let hintBox, hintText, getHintButton;
+        let isHintLoading = false;
+
+        let minimapCanvas, minimapCtx; // For minimap rendering
+        const MINIMAP_TILE_SIZE = 15; // Size of each tile on the minimap
+
+        // Bullet variables
+        let bullets = [];
+        const BULLET_SPEED = 0.5;
+        const BULLET_LIFETIME = 1000; // milliseconds
+        const BULLET_RADIUS = 0.1;
+        const BULLET_COLOR = 0xFF0000; // Red bullet
+        const BULLET_DAMAGE = 5; // Damage dealt by each bullet (matches server)
+        let canShoot = true; // Flag for bullet cooldown
+        const SHOOT_COOLDOWN = 300; // milliseconds between shots
+
+        // Multiplayer variables
+        let ws = null; // WebSocket instance
+        let myPlayerId = null;
+        let otherPlayers = {}; // Stores {player_id: {mesh: THREE.Mesh, health: ..., score: ..., ...}}
+
+        // Game constants
+        const WALL_COLOR = 0x8B4513; // SaddleBrown
+        const START_COLOR_3D = 0x000000; // Black/invisible for 3D start block
+        const END_COLOR = 0xFF0000;   // Red
+        const TELEPORTER_COLOR_OUT = 0x00BFFF; // Deep Sky Blue for 'L'
+        const TELEPORTER_COLOR_IN = 0x8A2BE2; // Blue Violet for 'l'
+        const FLOOR_COLOR = 0x333333; // Dark grey
+        const CEILING_COLOR = 0x222222; // Darker grey for ceiling
+        const BLOCK_SIZE = 5;         // Size of each cube (more spacious)
+        const WALL_HEIGHT = 6;        // Height of the walls (taller for spaciousness)
+        const PLAYER_HEIGHT = WALL_HEIGHT / 2; // Player's eye level, relative to floor
+        // Changed OTHER_PLAYER_HEIGHT to be proportional to player's eye level
+        const OTHER_PLAYER_HEIGHT = PLAYER_HEIGHT * 1.2; // Height of other player models (taller cylinder)
+        const OTHER_PLAYER_RADIUS_CYLINDER = BLOCK_SIZE * 0.15; // Thin cylinder radius
+        const MAX_HEALTH = 100; // Max health (matches server)
+
+        // Health bar constants for other players
+        const HEALTH_BAR_WIDTH = BLOCK_SIZE * 0.8;
+        const HEALTH_BAR_HEIGHT = 0.2;
+        const HEALTH_BAR_OFFSET_Y = OTHER_PLAYER_HEIGHT / 2 + 0.5; // Slightly above player model
+
+        // Global references for UI elements, initialized once
+        let connectionPanel, serverAddressInput, connectButton, connectionStatus;
+        let healthDisplay, scoreDisplay, crosshair, minimapContainer;
+        let healthBarFill;
+
+        function init() {
+            // Clear existing scene if re-initializing
+            if (scene) {
+                scene.clear();
+                renderer.dispose();
+                document.body.removeChild(renderer.domElement);
+                document.removeEventListener('keydown', onKeyDown);
+                document.removeEventListener('keyup', onKeyUp);
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('pointerlockchange', onPointerLockChange);
+                document.removeEventListener('pointerlockerror', onPointerLockError);
+                window.removeEventListener('resize', onWindowResize);
+                getHintButton.removeEventListener('click', requestHint);
+            }
+
+            // Scene, Camera, Renderer setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x444444);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            playerBody = new THREE.Object3D();
+            playerBody.add(camera);
+            scene.add(playerBody);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 1).normalize();
+            scene.add(directionalLight);
+
+            // Maze creation will now happen after receiving data from the server
+            // Maze dimensions will also be set by the server data.
+
+            // Player setup (initial values, will be updated by server 'init' message)
+            player = {
+                position: new THREE.Vector3(), // Will be set by server
+                velocity: new THREE.Vector3(),
+                height: PLAYER_HEIGHT,
+                radius: BLOCK_SIZE * 0.3,
+                currentLayer: 0, // Will be set by server
+                health: MAX_HEALTH, // Will be set by server
+                score: 0 // Will be set by server
+            };
+            // playerBody.position.copy(player.position); // Set after server provides position
+            camera.position.y = player.height;
+            currentMoveSpeed = normalMoveSpeed;
+
+            // Minimap setup (dimensions will be updated after maze data is received)
+            minimapCanvas = document.getElementById('minimap-canvas');
+            minimapCtx = minimapCanvas.getContext('2d');
+            // minimapCanvas.width and height will be set after mazeData is available
+
+            // Bullet array initialization
+            bullets = [];
+            canShoot = true;
+
+            // Multiplayer variables reset
+            myPlayerId = null;
+            for (const id in otherPlayers) {
+                scene.remove(otherPlayers[id].mesh);
+                if (otherPlayers[id].healthBar) {
+                    scene.remove(otherPlayers[id].healthBar);
+                }
+            }
+            otherPlayers = {};
+
+            // Game control event listeners (always active)
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            document.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('resize', onWindowResize);
+
+            // UI element updates
+            updateHealthDisplay();
+            updateScoreDisplay();
+            hideMessageBox();
+            hideHintBox();
+
+            // Ensure connection panel is visible on init/restart
+            connectionPanel.style.display = 'flex';
+            connectionStatus.textContent = "Disconnected. Enter server address and connect.";
+        }
+
+        // createMaze now accepts mazeData as an argument
+        function createMaze(newMazeData, newStartPosition, newEndPosition) {
+            mazeData = newMazeData; // Update global mazeData
+            startPosition.copy(newStartPosition); // Update global startPosition
+            endPosition.copy(newEndPosition); // Update global endPosition
+
+            mazeDepth = mazeData.length;
+            mazeHeight = mazeData[0].length;
+            mazeWidth = mazeData[0][0].length;
+            offsetX = (mazeWidth * BLOCK_SIZE) / 2;
+            offsetZ = (mazeHeight * BLOCK_SIZE) / 2;
+
+            // Clear existing walls and teleporters before re-creating
+            for (const wall of walls) {
+                scene.remove(wall);
+            }
+            walls = [];
+            for (const teleporter of teleporters) {
+                scene.remove(teleporter.mesh);
+            }
+            teleporters = [];
+
+            const wallMaterial = new THREE.MeshLambertMaterial({ color: WALL_COLOR });
+            const startMaterial = new THREE.MeshLambertMaterial({ color: START_COLOR_3D, transparent: true, opacity: 0 });
+            const endMaterial = new THREE.MeshLambertMaterial({ color: END_COLOR });
+            const teleporterOutMaterial = new THREE.MeshLambertMaterial({ color: TELEPORTER_COLOR_OUT });
+            const teleporterInMaterial = new THREE.MeshLambertMaterial({ color: TELEPORTER_COLOR_IN });
+            const floorMaterial = new THREE.MeshLambertMaterial({ color: FLOOR_COLOR });
+            const ceilingMaterial = new THREE.MeshLambertMaterial({ color: CEILING_COLOR });
+
+            for (let l = 0; l < mazeDepth; l++) {
+                for (let r = 0; r < mazeHeight; r++) {
+                    for (let c = 0; c < mazeWidth; c++) {
+                        const char = mazeData[l][r][c];
+
+                        const x = c * BLOCK_SIZE - offsetX + BLOCK_SIZE / 2;
+                        const z = r * BLOCK_SIZE - offsetZ + BLOCK_SIZE / 2;
+                        const y_floor = l * WALL_HEIGHT;
+
+                        if (char === '#') {
+                            const geometry = new THREE.BoxGeometry(BLOCK_SIZE, WALL_HEIGHT, BLOCK_SIZE);
+                            const cube = new THREE.Mesh(geometry, wallMaterial);
+                            cube.position.set(x, y_floor + WALL_HEIGHT / 2, z);
+                            scene.add(cube);
+                            walls.push(cube);
+                        } else if (char === 'S') {
+                            const geometry = new THREE.BoxGeometry(BLOCK_SIZE, WALL_HEIGHT, BLOCK_SIZE);
+                            const cube = new THREE.Mesh(geometry, startMaterial);
+                            cube.position.set(x, y_floor + WALL_HEIGHT / 2, z);
+                            scene.add(cube);
+                            // startPosition is now set from server data
+                        } else if (char === 'E') {
+                            const geometry = new THREE.BoxGeometry(BLOCK_SIZE, WALL_HEIGHT, BLOCK_SIZE);
+                            const cube = new THREE.Mesh(geometry, endMaterial);
+                            cube.position.set(x, y_floor + WALL_HEIGHT / 2, z);
+                            scene.add(cube);
+                            // endPosition is now set from server data
+                        } else if (char === 'L') {
+                            const geometry = new THREE.BoxGeometry(BLOCK_SIZE * 0.8, WALL_HEIGHT * 0.2, BLOCK_SIZE * 0.8);
+                            const cube = new THREE.Mesh(geometry, teleporterOutMaterial);
+                            cube.position.set(x, y_floor + (WALL_HEIGHT * 0.1), z);
+                            scene.add(cube);
+                            teleporters.push({ mesh: cube, layer: l, r: r, c: c, type: 'L' });
+                        } else if (char === 'l') {
+                            const geometry = new THREE.BoxGeometry(BLOCK_SIZE * 0.8, WALL_HEIGHT * 0.2, BLOCK_SIZE * 0.8);
+                            const cube = new THREE.Mesh(geometry, teleporterInMaterial);
+                            cube.position.set(x, y_floor + (WALL_HEIGHT * 0.1), z);
+                            scene.add(cube);
+                            teleporters.push({ mesh: cube, layer: l, r: r, c: c, type: 'l' });
+                        }
+
+                        if (char !== '#') {
+                            const floorGeometry = new THREE.PlaneGeometry(BLOCK_SIZE, BLOCK_SIZE);
+                            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+                            floor.rotation.x = -Math.PI / 2;
+                            floor.position.set(x, y_floor - 0.01, z);
+                            scene.add(floor);
+
+                            const ceilingGeometry = new THREE.PlaneGeometry(BLOCK_SIZE, BLOCK_SIZE);
+                            const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
+                            ceiling.rotation.x = Math.PI / 2;
+                            ceiling.position.set(x, y_floor + WALL_HEIGHT - 0.5, z);
+                            scene.add(ceiling);
+                        }
+                    }
+                }
+            }
+            // Update minimap canvas size based on new maze dimensions
+            minimapCanvas.width = mazeWidth * MINIMAP_TILE_SIZE;
+            minimapCanvas.height = mazeHeight * MINIMAP_TILE_SIZE;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onKeyDown(event) {
+            keyboard[event.code] = true;
+            if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+                currentMoveSpeed = runMoveSpeed;
+            }
+        }
+
+        function onKeyUp(event) {
+            keyboard[event.code] = false;
+            if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+                currentMoveSpeed = normalMoveSpeed;
+            }
+        }
+
+        function onMouseMove(event) {
+            if (document.pointerLockElement === renderer.domElement) {
+                playerBody.rotation.y -= event.movementX * mouseSensitivity;
+                let newPitch = camera.rotation.x - event.movementY * mouseSensitivity;
+                newPitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, newPitch));
+                camera.rotation.x = newPitch;
+            }
+        }
+
+        function onMouseDown(event) {
+            if (document.pointerLockElement === renderer.domElement && event.button === 0 && canShoot) {
+                shootBullet();
+                canShoot = false;
+                setTimeout(() => {
+                    canShoot = true;
+                }, SHOOT_COOLDOWN);
+            }
+        }
+
+        function requestPointerLock() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                renderer.domElement.requestPointerLock();
+            } else {
+                console.warn("Not connected to server. Cannot lock pointer.");
+                connectionStatus.textContent = "Not connected. Connect first!";
+            }
+        }
+
+        function onPointerLockChange() {
+            console.log('--- Pointer Lock Change Event ---');
+            console.log('document.pointerLockElement:', document.pointerLockElement);
+            console.log('renderer.domElement:', renderer.domElement);
+
+            if (document.pointerLockElement === renderer.domElement) {
+                console.log('Pointer lock engaged');
+            } else {
+                console.log('Pointer lock released');
+            }
+            console.log('---------------------------------');
+        }
+
+        function onPointerLockError() {
+            console.error('Pointer lock error');
+            connectionStatus.textContent = "Pointer Lock Error. Try again.";
+        }
+
+        function updatePlayerMovement() {
+            if (document.pointerLockElement !== renderer.domElement) {
+                return;
+            }
+
+            let moveDirection = new THREE.Vector3();
+            let forward = new THREE.Vector3();
+            let right = new THREE.Vector3();
+
+            playerBody.getWorldDirection(forward);
+            forward.y = 0;
+            forward.normalize();
+            right.crossVectors(camera.up, forward);
+
+            if (keyboard['KeyW']) {
+                moveDirection.sub(forward);
+            }
+            if (keyboard['KeyS']) {
+                moveDirection.add(forward);
+            }
+            if (keyboard['KeyA']) {
+                moveDirection.sub(right);
+            }
+            if (keyboard['KeyD']) {
+                moveDirection.add(right);
+            }
+
+            if (moveDirection.lengthSq() > 0) {
+                moveDirection.normalize().multiplyScalar(currentMoveSpeed);
+            }
+
+            const currentX = player.position.x;
+            const currentZ = player.position.z;
+
+            player.position.x += moveDirection.x;
+            if (checkCollision(player.position.x, currentZ)) {
+                player.position.x = currentX;
+            }
+
+            player.position.z += moveDirection.z;
+            if (checkCollision(player.position.x, player.position.z)) {
+                player.position.z = currentZ;
+            }
+
+            handleTeleportation();
+            playerBody.position.copy(player.position);
+
+            if (ws && ws.readyState === WebSocket.OPEN && myPlayerId) {
+                const playerUpdate = {
+                    type: "player_update",
+                    position: { x: player.position.x, y: player.position.y, z: player.position.z },
+                    rotation: { x: playerBody.rotation.x, y: playerBody.rotation.y, z: playerBody.rotation.z },
+                    layer: player.currentLayer,
+                };
+                ws.send(JSON.stringify(playerUpdate));
+            }
+        }
+
+        function checkCollision(targetX, targetZ) {
+            const playerMinX = targetX - player.radius;
+            const playerMaxX = targetX + player.radius;
+            const playerMinZ = targetZ - player.radius;
+            const playerMaxZ = targetZ + player.radius;
+
+            const playerMinY = player.currentLayer * WALL_HEIGHT;
+            const playerMaxY = playerMinY + WALL_HEIGHT;
+
+            for (const wall of walls) {
+                const wallLayer = Math.round(wall.position.y / WALL_HEIGHT - 0.5);
+                if (wallLayer !== player.currentLayer) {
+                    continue;
+                }
+
+                const wallBox = new THREE.Box3().setFromObject(wall);
+                const playerBox = new THREE.Box3(
+                    new THREE.Vector3(playerMinX, playerMinY, playerMinZ),
+                    new THREE.Vector3(playerMaxX, playerMaxY, playerMaxZ)
+                );
+
+                if (playerBox.intersectsBox(wallBox)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function handleTeleportation() {
+            const playerGridC = Math.floor((player.position.x + offsetX) / BLOCK_SIZE);
+            const playerGridR = Math.floor((player.position.z + offsetZ) / BLOCK_SIZE);
+
+            let onTeleporter = null;
+            for (const teleporter of teleporters) {
+                if (teleporter.layer === player.currentLayer &&
+                    teleporter.r === playerGridR &&
+                    teleporter.c === playerGridC) {
+                    onTeleporter = teleporter;
+                    break;
+                }
+            }
+
+            if (onTeleporter) {
+                if (onTeleporter.type === 'L' && keyboard['Space']) {
+                    const targetTeleporter = teleporters.find(t => t.type === 'l' && t.layer === player.currentLayer + 1);
+                    if (targetTeleporter) {
+                        player.currentLayer++;
+                        player.position.x = targetTeleporter.mesh.position.x;
+                        player.position.z = targetTeleporter.mesh.position.z;
+                        player.position.y = player.currentLayer * WALL_HEIGHT;
+                        playerBody.position.y = player.currentLayer * WALL_HEIGHT;
+                        keyboard['Space'] = false;
+                    }
+                }
+            }
+
+            // The 'E' block logic for teleporting back to start.
+            // This assumes 'E' is on the last layer (mazeDepth - 1).
+            // We need to find the coordinates of 'E' from the received mazeData.
+            let endGridC = -1, endGridR = -1;
+            if (mazeData.length > 0) { // Ensure mazeData is loaded
+                const lastLayer = mazeData[mazeDepth - 1];
+                for (let r = 0; r < lastLayer.length; r++) {
+                    for (let c = 0; c < lastLayer[r].length; c++) {
+                        if (lastLayer[r][c] === 'E') {
+                            endGridR = r;
+                            endGridC = c;
+                            break;
+                        }
+                    }
+                    if (endGridR !== -1) break;
+                }
+            }
+
+
+            if (player.currentLayer === mazeDepth - 1 &&
+                playerGridR === endGridR &&
+                playerGridC === endGridC) {
+                console.log("Reached 'E' block. Teleporting to start.");
+                // Player position and layer will be reset by the server's respawn message
+                // No client-side teleportation here, server will handle it.
+            }
+        }
+
+        function shootBullet() {
+            const bulletGeometry = new THREE.SphereGeometry(BULLET_RADIUS, 8, 8);
+            const bulletMaterial = new THREE.MeshBasicMaterial({ color: BULLET_COLOR });
+            const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+
+            const bulletStartPos = new THREE.Vector3();
+            camera.getWorldPosition(bulletStartPos);
+            bullet.position.copy(bulletStartPos);
+
+            const bulletDirection = new THREE.Vector3();
+            camera.getWorldDirection(bulletDirection);
+
+            bullets.push({
+                mesh: bullet,
+                direction: bulletDirection,
+                speed: BULLET_SPEED,
+                spawnTime: Date.now(),
+                shooterId: myPlayerId
+            });
+
+            scene.add(bullet);
+
+            if (ws && ws.readyState === WebSocket.OPEN && myPlayerId) {
+                const bulletEvent = {
+                    type: "bullet_fired",
+                    shooter_id: myPlayerId,
+                    start_position: { x: bulletStartPos.x, y: bulletStartPos.y, z: bulletStartPos.z },
+                    direction: { x: bulletDirection.x, y: bulletDirection.y, z: bulletDirection.z },
+                    layer: player.currentLayer
+                };
+                ws.send(JSON.stringify(bulletEvent));
+            }
+        }
+
+        function updateBullets() {
+            const now = Date.now();
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                bullet.mesh.position.add(bullet.direction.clone().multiplyScalar(bullet.speed));
+
+                let hit = false;
+
+                const bulletGridC = Math.floor((bullet.mesh.position.x + offsetX) / BLOCK_SIZE);
+                const bulletGridR = Math.floor((bullet.mesh.position.z + offsetZ) / BLOCK_SIZE);
+                const bulletLayer = Math.round(bullet.mesh.position.y / WALL_HEIGHT);
+
+                if (bulletLayer >= 0 && bulletLayer < mazeDepth &&
+                    bulletGridR >= 0 && bulletGridR < mazeHeight &&
+                    bulletGridC >= 0 && bulletGridC < mazeWidth) {
+                    const char = mazeData[bulletLayer][bulletGridR][bulletGridC];
+                    if (char === '#') {
+                        hit = true;
+                    }
+                }
+
+                if (!hit) {
+                    if (bullet.shooterId === myPlayerId) {
+                        for (const id in otherPlayers) {
+                            if (id === myPlayerId) continue;
+
+                            const otherPlayer = otherPlayers[id];
+                            if (otherPlayer.layer === bulletLayer) {
+                                const otherPlayerCenter = otherPlayer.mesh.position.clone();
+                                otherPlayerCenter.y = bullet.mesh.position.y;
+                                const distance = bullet.mesh.position.distanceTo(otherPlayerCenter);
+
+                                if (distance < BULLET_RADIUS + OTHER_PLAYER_RADIUS_CYLINDER) {
+                                    console.log(`Bullet from ${bullet.shooterId} hit ${id}!`);
+                                    if (ws && ws.readyState === WebSocket.OPEN) {
+                                        ws.send(JSON.stringify({
+                                            type: "player_hit",
+                                            target_id: id,
+                                        }));
+                                    }
+                                    hit = true;
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        if (bulletLayer === player.currentLayer) {
+                            const playerCenter = playerBody.position.clone();
+                            playerCenter.y = bullet.mesh.position.y;
+                            const distance = bullet.mesh.position.distanceTo(playerCenter);
+
+                            if (distance < BULLET_RADIUS + player.radius) {
+                                console.log(`Bullet from ${bullet.shooterId} hit ME (${myPlayerId})!`);
+                                if (ws && ws.readyState === WebSocket.OPEN) {
+                                    ws.send(JSON.stringify({
+                                        type: "player_hit",
+                                        target_id: myPlayerId,
+                                    }));
+                                }
+                                hit = true;
+                            }
+                        }
+                    }
+                }
+
+                if (hit || now - bullet.spawnTime > BULLET_LIFETIME) {
+                    scene.remove(bullet.mesh);
+                    bullets.splice(i, 1);
+                }
+            }
+        }
+
+        function createOtherPlayerBullet(bulletData) {
+            const bulletGeometry = new THREE.SphereGeometry(BULLET_RADIUS, 8, 8);
+            const bulletMaterial = new THREE.MeshBasicMaterial({ color: BULLET_COLOR });
+            const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+
+            bullet.position.set(bulletData.start_position.x, bulletData.start_position.y, bulletData.start_position.z);
+            const direction = new THREE.Vector3(bulletData.direction.x, bulletData.direction.y, bulletData.direction.z);
+
+            bullets.push({
+                mesh: bullet,
+                direction: direction,
+                speed: BULLET_SPEED,
+                spawnTime: Date.now(),
+                shooterId: bulletData.shooter_id
+            });
+            scene.add(bullet);
+        }
+
+        function checkGoal() {
+            if (player.health <= 0) return;
+        }
+
+        function showMessageBox(message, type = "") {
+            messageText.innerHTML = message;
+            messageBox.className = '';
+            messageBox.classList.add('message-box');
+            if (type) {
+                messageBox.classList.add(type);
+            }
+            messageBox.style.display = 'block';
+        }
+
+        function hideMessageBox() {
+            messageBox.style.display = 'none';
+        }
+
+        function showHintBox(message, isLoading = false) {
+            hintText.textContent = message;
+            hintBox.style.display = 'block';
+            if (isLoading) {
+                hintBox.classList.add('loading');
+            } else {
+                hintBox.classList.remove('loading');
+            }
+        }
+
+        function hideHintBox() {
+            hintBox.style.display = 'none';
+            hintBox.classList.remove('loading');
+        }
+
+        function updateHealthDisplay() {
+            if (healthBarFill) {
+                const healthPercentage = player.health / MAX_HEALTH;
+                healthBarFill.style.width = `${healthPercentage * 100}%`;
+
+                let color;
+                if (player.health <= 20) {
+                    color = '#FF0000';
+                } else if (player.health <= 50) {
+                    color = '#FFA500';
+                } else {
+                    color = '#00FF00';
+                }
+                healthBarFill.style.backgroundColor = color;
+            }
+        }
+
+        function updateScoreDisplay() {
+            if (scoreDisplay) {
+                scoreDisplay.textContent = `Score: ${player.score}`;
+            }
+        }
+
+        async function requestHint() {
+            if (isHintLoading) return;
+
+            showHintBox("Generating hint...", true);
+            isHintLoading = true;
+
+            // Ensure mazeData is available before generating hint
+            if (!mazeData || mazeData.length === 0) {
+                showHintBox("Maze data not yet loaded from server. Please connect first.");
+                isHintLoading = false;
+                return;
+            }
+
+            const playerGridC = Math.floor((player.position.x + offsetX) / BLOCK_SIZE);
+            const playerGridR = Math.floor((player.position.z + offsetZ) / BLOCK_SIZE);
+
+            // Find end position from received mazeData
+            let endGridC = -1, endGridR = -1;
+            const endLayer = mazeDepth - 1; // Assuming E is always on the last layer
+            const lastLayerMap = mazeData[endLayer];
+            for (let r = 0; r < lastLayerMap.length; r++) {
+                for (let c = 0; c < lastLayerMap[r].length; c++) {
+                    if (lastLayerMap[r][c] === 'E') {
+                        endGridR = r;
+                        endGridC = c;
+                        break;
+                    }
+                }
+                if (endGridR !== -1) break;
+            }
+
+
+            const currentLayerMap = mazeData[player.currentLayer].join('\n');
+            let adjacentLayerInfo = "";
+            if (player.currentLayer > 0) {
+                adjacentLayerInfo += `\nPrevious Layer (${player.currentLayer - 1}):\n${mazeData[player.currentLayer - 1].join('\n')}`;
+            }
+            if (player.currentLayer < mazeDepth - 1) {
+                adjacentLayerInfo += `\nNext Layer (${player.currentLayer + 1}):\n${mazeData[player.currentLayer + 1].join('\n')}`;
+            }
+
+            const prompt = `You are in a 3D maze game.
+Your current position is on Layer ${player.currentLayer} at grid coordinates (row: ${playerGridR}, column: ${playerGridC}).
+The exit is on Layer ${endLayer} at grid coordinates (row: ${endGridR}, column: ${endGridC}).
+
+Here is the map of your current layer (${player.currentLayer}):
+${currentLayerMap}
+
+Here is information about adjacent layers (if applicable):
+${adjacentLayerInfo}
+
+'S' is start, 'E' is exit, '#' is a wall, ' ' is a path, 'L' is a teleport out (to next layer), 'l' is a teleport in (from previous layer).
+Teleporters allow you to move between layers.
+
+Provide a concise, helpful hint to guide the player towards the exit. Do not give the full solution. Focus on the next immediate step or direction, or suggest looking for a teleporter if appropriate. Keep it under 50 words.`;
+
+            let chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+
+            const payload = { contents: chatHistory };
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const hint = result.candidates[0].content.parts[0].text;
+                    showHintBox(hint);
+                } else {
+                    showHintBox("Failed to get hint. Please try again.");
+                    console.error("Gemini API response structure unexpected:", result);
+                }
+            } catch (error) {
+                showHintBox("Error fetching hint. Check console for details.");
+                console.error("Error calling Gemini API:", error);
+            } finally {
+                isHintLoading = false;
+            }
+        }
+
+        function drawMinimap() {
+            // Only draw minimap if mazeData is available
+            if (!mazeData || mazeData.length === 0) {
+                minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+                return;
+            }
+
+            minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCtx.height);
+
+            const currentLayerMap = mazeData[player.currentLayer];
+
+            for (let r = 0; r < mazeHeight; r++) {
+                for (let c = 0; c < mazeWidth; c++) {
+                    const char = currentLayerMap[r][c];
+                    let color = '#555';
+
+                    if (char === '#') {
+                        color = '#8B4513';
+                    } else if (char === 'S') {
+                        color = '#00FF00';
+                    } else if (char === 'E') {
+                        color = '#FF0000';
+                    } else if (char === 'L') {
+                        color = '#00BFFF';
+                    } else if (char === 'l') {
+                        color = '#8A2BE2';
+                    }
+
+                    minimapCtx.fillStyle = color;
+                    minimapCtx.fillRect(c * MINIMAP_TILE_SIZE, r * MINIMAP_TILE_SIZE, MINIMAP_TILE_SIZE, MINIMAP_TILE_SIZE);
+                }
+            }
+
+            for (const id in otherPlayers) {
+                const otherPlayer = otherPlayers[id];
+                if (otherPlayer.layer === player.currentLayer) {
+                    const otherPlayerGridC = Math.floor((otherPlayer.position.x + offsetX) / BLOCK_SIZE);
+                    const otherPlayerGridR = Math.floor((otherPlayer.position.z + offsetZ) / BLOCK_SIZE);
+
+                    minimapCtx.fillStyle = otherPlayer.color || 'blue';
+                    minimapCtx.beginPath();
+                    minimapCtx.arc(
+                        otherPlayerGridC * MINIMAP_TILE_SIZE + MINIMAP_TILE_SIZE / 2,
+                        otherPlayerGridR * MINIMAP_TILE_SIZE + MINIMAP_TILE_SIZE / 2,
+                        MINIMAP_TILE_SIZE / 3,
+                        0, Math.PI * 2
+                    );
+                    minimapCtx.fill();
+                }
+            }
+
+            const playerGridC = Math.floor((player.position.x + offsetX) / BLOCK_SIZE);
+            const playerGridR = Math.floor((player.position.z + offsetZ) / BLOCK_SIZE);
+
+            minimapCtx.fillStyle = 'yellow';
+            minimapCtx.beginPath();
+            minimapCtx.arc(
+                playerGridC * MINIMAP_TILE_SIZE + MINIMAP_TILE_SIZE / 2,
+                playerGridR * MINIMAP_TILE_SIZE + MINIMAP_TILE_SIZE / 2,
+                MINIMAP_TILE_SIZE / 3,
+                0, Math.PI * 2
+            );
+            minimapCtx.fill();
+
+            minimapCtx.strokeStyle = 'white';
+            minimapCtx.lineWidth = 2;
+            minimapCtx.beginPath();
+            const playerCenterX = playerGridC * MINIMAP_TILE_SIZE + MINIMAP_TILE_SIZE / 2;
+            const playerCenterY = playerGridR * MINIMAP_TILE_SIZE + MINIMAP_TILE_SIZE / 2;
+            minimapCtx.moveTo(playerCenterX, playerCenterY);
+
+            const forwardVector = new THREE.Vector3();
+            playerBody.getWorldDirection(forwardVector);
+            forwardVector.y = 0;
+            forwardVector.normalize();
+
+            const arrowLength = MINIMAP_TILE_SIZE / 2;
+            minimapCtx.lineTo(
+                playerCenterX + forwardVector.x * arrowLength,
+                playerCenterY - forwardVector.z * arrowLength
+            );
+            minimapCtx.stroke();
+        }
+
+
+        function restartGame() {
+            hideMessageBox();
+            hideHintBox();
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+            init();
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            updatePlayerMovement();
+            updateBullets();
+            updateOtherPlayers();
+            checkGoal();
+            drawMinimap();
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Multiplayer Functions ---
+        function connectToServer() {
+            console.log("Connect button clicked. Attempting to connect...");
+            const serverAddress = serverAddressInput.value;
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                console.log("Already connected.");
+                connectionStatus.textContent = "Already Connected.";
+                return;
+            }
+
+            connectionStatus.textContent = `Attempting to connect to ${serverAddress}...`;
+            console.log(`Attempting to connect to WebSocket server at: ${serverAddress}`);
+
+            ws = new WebSocket(serverAddress);
+
+            ws.onopen = () => {
+                connectionStatus.textContent = "Connected! Click game screen to play.";
+                connectionPanel.style.display = 'none'; // HIDE THE CONNECTION PANEL ON SUCCESS
+                console.log("WebSocket connected successfully!");
+                renderer.domElement.addEventListener('click', requestPointerLock);
+                renderer.domElement.addEventListener('mousedown', onMouseDown);
+            };
+
+            ws.onmessage = (event) => {
+                console.log("Received raw message:", event.data);
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log("Received parsed message:", data);
+
+                    if (data.type === "init") {
+                        myPlayerId = data.player_id;
+                        console.log(`My player ID: ${myPlayerId}`);
+                        // Create maze based on server data
+                        createMaze(data.maze_data,
+                                   new THREE.Vector3(data.start_position.x, data.start_position.y, data.start_position.z),
+                                   new THREE.Vector3(data.end_position.x, data.end_position.y, data.end_position.z));
+
+                        // --- FIX STARTS HERE ---
+                        // Initialize my own player's state directly from data.start_position
+                        player.position.set(data.start_position.x, data.start_position.y, data.start_position.z);
+                        player.currentLayer = 0; // Server sends layer 0 for start
+                        player.health = MAX_HEALTH; // Set to max health on init
+                        player.score = 0; // Set score to 0 on init
+
+                        playerBody.position.copy(player.position); // Set playerBody position
+                        playerBody.position.y = player.currentLayer * WALL_HEIGHT; // Ensure correct Y
+                        camera.position.y = player.height; // Reset camera height relative to playerBody
+
+                        updateHealthDisplay();
+                        updateScoreDisplay();
+                        // --- FIX ENDS HERE ---
+
+                        data.players.forEach(p => {
+                            if (p.player_id !== myPlayerId) { // Only add other players
+                                addOtherPlayer(p);
+                            }
+                        });
+
+                        // Add the console logs here to see the result of the fix
+                        console.log("Client: Player initialized with server data:");
+                        console.log("  player.position:", player.position.x, player.position.y, player.position.z);
+                        console.log("  playerBody.position:", playerBody.position.x, playerBody.position.y, playerBody.position.z);
+                        console.log("  camera.position (relative to playerBody):", camera.position.x, camera.position.y, camera.position.z);
+                        console.log("  camera.position (world):", camera.getWorldPosition(new THREE.Vector3()).x, camera.getWorldPosition(new THREE.Vector3()).y, camera.getWorldPosition(new THREE.Vector3()).z);
+                        console.log("  player.currentLayer:", player.currentLayer);
+
+                    } else if (data.type === "player_connected") {
+                        if (data.player_id !== myPlayerId) {
+                            addOtherPlayer(data);
+                        }
+                    } else if (data.type === "player_update") {
+                        if (data.player_id !== myPlayerId) {
+                            updateOtherPlayer(data);
+                        }
+                    } else if (data.type === "player_disconnected") {
+                        removeOtherPlayer(data.player_id);
+                    } else if (data.type === "bullet_fired") {
+                        if (data.shooter_id !== myPlayerId) {
+                            createOtherPlayerBullet(data);
+                        }
+                    } else if (data.type === "game_win") {
+                        showMessageBox(`${data.winner_id} found the exit!`, "win");
+                        document.exitPointerLock();
+                    } else if (data.type === "health_update") {
+                        const targetPlayerId = data.target_id;
+                        const newHealth = data.new_health;
+                        const newScore = data.score;
+
+                        if (targetPlayerId === myPlayerId) {
+                            player.health = newHealth;
+                            player.score = newScore;
+                            updateHealthDisplay();
+                            updateScoreDisplay();
+                        } else {
+                            const otherPlayer = otherPlayers[targetPlayerId];
+                            if (otherPlayer) {
+                                otherPlayer.health = newHealth;
+                                otherPlayer.score = newScore;
+                                updateOtherPlayerHealthBar(otherPlayer);
+                                console.log(`Player ${targetPlayerId} health: ${newHealth}, score: ${newScore}`);
+                            }
+                        }
+                    } else if (data.type === "score_update") {
+                        const targetPlayerId = data.player_id;
+                        const newScore = data.new_score;
+
+                        if (targetPlayerId === myPlayerId) {
+                            player.score = newScore;
+                            updateScoreDisplay();
+                        } else {
+                            const otherPlayer = otherPlayers[targetPlayerId];
+                            if (otherPlayer) {
+                                otherPlayer.score = newScore;
+                            }
+                        }
+                    }
+                    else if (data.type === "player_defeated") {
+                        const defeatedPlayerId = data.player_id;
+                        const finalScore = data.final_score;
+                        const killerId = data.killer_id;
+
+                        if (defeatedPlayerId === myPlayerId) {
+                            player.health = 0; // Ensure health is 0 for display
+                            player.score = finalScore; // Update my final score
+                            updateHealthDisplay();
+                            updateScoreDisplay();
+                            showMessageBox("You Died!", "lose"); // Show "You Died" popup
+                            document.exitPointerLock(); // Unlock mouse
+                        } else {
+                            removeOtherPlayer(defeatedPlayerId);
+                            console.log(`Player ${defeatedPlayerId} was defeated by ${killerId}! Final Score: ${finalScore}`);
+                        }
+                    } else if (data.type === "player_respawned") {
+                        const respawnedPlayerId = data.player_id;
+                        if (respawnedPlayerId === myPlayerId) {
+                            // This is MY player respawning. Update local player state directly.
+                            player.position.set(data.position.x, data.position.y, data.position.z);
+                            player.currentLayer = data.layer;
+                            player.health = data.health;
+                            player.score = data.score;
+
+                            playerBody.position.copy(player.position);
+                            playerBody.position.y = player.currentLayer * WALL_HEIGHT; // Ensure correct Y for new layer
+                            camera.position.y = player.height; // Reset camera height relative to playerBody
+
+                            updateHealthDisplay();
+                            updateScoreDisplay();
+                            hideMessageBox(); // Hide any lingering message box
+                            requestPointerLock(); // Re-engage pointer lock
+                            console.log(`You respawned at Layer ${player.currentLayer} with Health ${player.health} and Score ${player.score}.`);
+                        } else {
+                            // Another player respawned, re-add or update their visual
+                            addOtherPlayer(data);
+                            console.log(`Player ${respawnedPlayerId} respawned.`);
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error parsing WebSocket message:", e, "Message:", event.data);
+                }
+            };
+
+            ws.onclose = (event) => {
+                connectionStatus.textContent = `Disconnected (Code: ${event.code}, Reason: ${event.reason || 'No reason provided'}). Click Connect to retry.`;
+                connectionPanel.style.display = 'flex'; // Show connection panel again
+                console.log("WebSocket disconnected:", event.code, event.reason);
+                renderer.domElement.removeEventListener('click', requestPointerLock);
+                renderer.domElement.removeEventListener('mousedown', onMouseDown);
+                for (const id in otherPlayers) {
+                    scene.remove(otherPlayers[id].mesh);
+                    if (otherPlayers[id].healthBar) {
+                        scene.remove(otherPlayers[id].healthBar);
+                    }
+                }
+                otherPlayers = {};
+                player.health = MAX_HEALTH;
+                player.score = 0;
+                updateHealthDisplay();
+                updateScoreDisplay();
+            };
+
+            ws.onerror = (error) => {
+                connectionStatus.textContent = "Connection Error! Check browser console and server terminal.";
+                console.error("WebSocket error:", error);
+            };
+        }
+
+        function addOtherPlayer(playerData) {
+            if (otherPlayers[playerData.player_id]) {
+                updateOtherPlayer(playerData);
+                return;
+            }
+
+            const geometry = new THREE.CylinderGeometry(
+                OTHER_PLAYER_RADIUS_CYLINDER,
+                OTHER_PLAYER_RADIUS_CYLINDER,
+                OTHER_PLAYER_HEIGHT,
+                16
+            );
+            const material = new THREE.MeshLambertMaterial({ color: new THREE.Color(playerData.color || 0x0000FF) });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(playerData.position.x, playerData.layer * WALL_HEIGHT + OTHER_PLAYER_HEIGHT / 2, playerData.position.z);
+            mesh.rotation.set(playerData.rotation.x, playerData.rotation.y, playerData.rotation.z);
+            scene.add(mesh);
+
+            const healthBarGeometry = new THREE.PlaneGeometry(HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT);
+            const healthBarMaterial = new THREE.MeshBasicMaterial({ color: 0x00FF00, side: THREE.DoubleSide });
+            const healthBar = new THREE.Mesh(healthBarGeometry, healthBarMaterial);
+            healthBar.position.set(
+                mesh.position.x,
+                mesh.position.y + HEALTH_BAR_OFFSET_Y,
+                mesh.position.z
+            );
+            scene.add(healthBar);
+
+
+            otherPlayers[playerData.player_id] = {
+                mesh: mesh,
+                healthBar: healthBar,
+                position: new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z),
+                rotation: new THREE.Euler(playerData.rotation.x, playerData.rotation.y, playerData.rotation.z),
+                layer: playerData.layer,
+                color: playerData.color,
+                health: playerData.health || MAX_HEALTH,
+                score: playerData.score || 0
+            };
+            console.log(`Added other player: ${playerData.player_id}`);
+
+            updateOtherPlayerHealthBar(otherPlayers[playerData.player_id]);
+        }
+
+        function updateOtherPlayer(playerData) {
+            const otherPlayer = otherPlayers[playerData.player_id];
+            if (otherPlayer) {
+                otherPlayer.mesh.position.set(playerData.position.x, playerData.layer * WALL_HEIGHT + OTHER_PLAYER_HEIGHT / 2, playerData.position.z);
+                otherPlayer.mesh.rotation.set(playerData.rotation.x, playerData.rotation.y, playerData.rotation.z);
+                otherPlayer.layer = playerData.layer;
+
+                otherPlayer.health = playerData.health;
+                otherPlayer.score = playerData.score;
+
+                otherPlayer.position.copy(otherPlayer.mesh.position);
+                otherPlayer.rotation.copy(otherPlayer.mesh.rotation);
+
+                otherPlayer.healthBar.position.set(
+                    otherPlayer.mesh.position.x,
+                    otherPlayer.mesh.position.y + HEALTH_BAR_OFFSET_Y,
+                    otherPlayer.mesh.position.z
+                );
+                otherPlayer.healthBar.lookAt(camera.position);
+
+                updateOtherPlayerHealthBar(otherPlayer);
+            }
+        }
+
+        function updateOtherPlayerHealthBar(otherPlayer) {
+            if (!otherPlayer || !otherPlayer.healthBar) return;
+
+            const healthPercentage = otherPlayer.health / MAX_HEALTH;
+            otherPlayer.healthBar.scale.x = healthPercentage;
+
+            let color;
+            if (healthPercentage > 0.6) {
+                color = 0x00FF00;
+            } else if (healthPercentage > 0.3) {
+                color = 0xFFA500;
+            } else {
+                color = 0xFF0000;
+            }
+            otherPlayer.healthBar.material.color.setHex(color);
+
+            otherPlayer.healthBar.visible = otherPlayer.health > 0;
+        }
+
+
+        function removeOtherPlayer(playerId) {
+            const otherPlayer = otherPlayers[playerId];
+            if (otherPlayer) {
+                scene.remove(otherPlayer.mesh);
+                if (otherPlayer.healthBar) {
+                    scene.remove(otherPlayer.healthBar);
+                }
+                delete otherPlayers[playerId];
+                console.log(`Removed other player: ${playerId}`);
+            }
+        }
+
+        function updateOtherPlayers() {
+            for (const id in otherPlayers) {
+                const otherPlayer = otherPlayers[id];
+                if (otherPlayer.healthBar) {
+                    otherPlayer.healthBar.lookAt(camera.position);
+                }
+            }
+        }
+
+        // Initialize on window load
+        window.onload = function() {
+            messageBox = document.getElementById('message-box');
+            messageText = document.getElementById('message-text');
+            messageBoxCloseButton = document.getElementById('message-box-close-button');
+            messageBoxCloseButton.addEventListener('click', hideMessageBox); // Close button for message box
+
+            hintBox = document.getElementById('hint-box');
+            hintText = document.getElementById('hint-text');
+            getHintButton = document.getElementById('get-hint-button');
+            getHintButton.addEventListener('click', requestHint);
+
+            connectionPanel = document.getElementById('connection-panel');
+            serverAddressInput = document.getElementById('server-address-input');
+            connectButton = document.getElementById('connect-button');
+            connectionStatus = document.getElementById('connection-status');
+            connectButton.addEventListener('click', connectToServer);
+
+            healthDisplay = document.getElementById('health-bar-container');
+            healthBarFill = document.getElementById('health-bar-fill');
+            scoreDisplay = document.getElementById('score-display');
+            crosshair = document.getElementById('crosshair');
+            minimapContainer = document.getElementById('minimap-container');
+
+            init();
+            animate();
+        };
+    </script>
+</body>
+</html>
+
