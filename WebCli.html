@@ -239,7 +239,7 @@
         S: Forward<br>
         A: Strafe Left<br>
         D: Strafe Right<br>
-        Space: Teleport Up (on 'L' block)<br>
+        Space: Teleport (on 'S'/'E'/'L'/'l' block)<br>
         Shift: Run<br>
         Left Click: Shoot<br>
         Mouse: Look around<br>
@@ -290,14 +290,18 @@
         let player; // Player object (position, velocity, currentLayer)
         let keyboard = {}; // To track key states
         let mouseSensitivity = 0.002; // How fast the camera rotates with mouse
-        let normalMoveSpeed = 0.1; // Normal walking speed
-        let runMoveSpeed = 0.2;    // Running speed
+        let normalMoveSpeed = 0.2; // Increased normal walking speed (2x original)
+        let runMoveSpeed = 0.4;    // Increased running speed (2x original)
         let currentMoveSpeed = normalMoveSpeed; // Current speed
         let mazeDepth, mazeHeight, mazeWidth; // Dimensions of the 3D maze
         let walls = []; // Array to store wall meshes for collision
         let teleporters = []; // Array to store teleporter block positions (L and l)
         let startPosition = new THREE.Vector3(); // Will be set by server
         let endPosition = new THREE.Vector3(); // Will be set by server
+
+        // Store the actual S and E block coordinates for teleportation
+        let sBlockCoords = { layer: -1, r: -1, c: -1 };
+        let eBlockCoords = { layer: -1, r: -1, c: -1 };
 
         let messageBox, messageText, messageBoxCloseButton;
         let hintBox, hintText, getHintButton;
@@ -323,14 +327,15 @@
 
         // Game constants
         const WALL_COLOR = 0x8B4513; // SaddleBrown
-        const START_COLOR_3D = 0x000000; // Black/invisible for 3D start block
-        const END_COLOR = 0xFF0000;   // Red
+        // Changed START_COLOR_3D and END_COLOR to match teleporter colors
+        const START_COLOR_3D = 0x00BFFF; // Deep Sky Blue for 'S' (teleporter out)
+        const END_COLOR = 0x8A2BE2;   // Blue Violet for 'E' (teleporter in)
         const TELEPORTER_COLOR_OUT = 0x00BFFF; // Deep Sky Blue for 'L'
         const TELEPORTER_COLOR_IN = 0x8A2BE2; // Blue Violet for 'l'
         const FLOOR_COLOR = 0x333333; // Dark grey
         const CEILING_COLOR = 0x222222; // Darker grey for ceiling
         const BLOCK_SIZE = 5;         // Size of each cube (more spacious)
-        const WALL_HEIGHT = 6;        // Height of the walls (taller for spaciousness)
+        const WALL_HEIGHT = 10;       // Height of the walls (taller for spaciousness)
         const PLAYER_HEIGHT = WALL_HEIGHT / 2; // Player's eye level, relative to floor
         // Changed OTHER_PLAYER_HEIGHT to be proportional to player's eye level
         const OTHER_PLAYER_HEIGHT = PLAYER_HEIGHT * 1.2; // Height of other player models (taller cylinder)
@@ -456,8 +461,9 @@
             teleporters = [];
 
             const wallMaterial = new THREE.MeshLambertMaterial({ color: WALL_COLOR });
-            const startMaterial = new THREE.MeshLambertMaterial({ color: START_COLOR_3D, transparent: true, opacity: 0 });
-            const endMaterial = new THREE.MeshLambertMaterial({ color: END_COLOR });
+            // Use teleporter materials for S and E blocks
+            const sTeleporterMaterial = new THREE.MeshLambertMaterial({ color: START_COLOR_3D }); // Deep Sky Blue for 'S'
+            const eTeleporterMaterial = new THREE.MeshLambertMaterial({ color: END_COLOR });   // Blue Violet for 'E'
             const teleporterOutMaterial = new THREE.MeshLambertMaterial({ color: TELEPORTER_COLOR_OUT });
             const teleporterInMaterial = new THREE.MeshLambertMaterial({ color: TELEPORTER_COLOR_IN });
             const floorMaterial = new THREE.MeshLambertMaterial({ color: FLOOR_COLOR });
@@ -479,17 +485,21 @@
                             scene.add(cube);
                             walls.push(cube);
                         } else if (char === 'S') {
-                            const geometry = new THREE.BoxGeometry(BLOCK_SIZE, WALL_HEIGHT, BLOCK_SIZE);
-                            const cube = new THREE.Mesh(geometry, startMaterial);
-                            cube.position.set(x, y_floor + WALL_HEIGHT / 2, z);
+                            // Render 'S' as a teleporter block
+                            const geometry = new THREE.BoxGeometry(BLOCK_SIZE * 0.8, WALL_HEIGHT * 0.2, BLOCK_SIZE * 0.8);
+                            const cube = new THREE.Mesh(geometry, sTeleporterMaterial);
+                            cube.position.set(x, y_floor + (WALL_HEIGHT * 0.1), z);
                             scene.add(cube);
-                            // startPosition is now set from server data
+                            teleporters.push({ mesh: cube, layer: l, r: r, c: c, type: 'S' }); // Store 'S' as a teleporter
+                            sBlockCoords = { layer: l, r: r, c: c }; // Store S block coordinates
                         } else if (char === 'E') {
-                            const geometry = new THREE.BoxGeometry(BLOCK_SIZE, WALL_HEIGHT, BLOCK_SIZE);
-                            const cube = new THREE.Mesh(geometry, endMaterial);
-                            cube.position.set(x, y_floor + WALL_HEIGHT / 2, z);
+                            // Render 'E' as a teleporter block
+                            const geometry = new THREE.BoxGeometry(BLOCK_SIZE * 0.8, WALL_HEIGHT * 0.2, BLOCK_SIZE * 0.8);
+                            const cube = new THREE.Mesh(geometry, eTeleporterMaterial);
+                            cube.position.set(x, y_floor + (WALL_HEIGHT * 0.1), z);
                             scene.add(cube);
-                            // endPosition is now set from server data
+                            teleporters.push({ mesh: cube, layer: l, r: r, c: c, type: 'E' }); // Store 'E' as a teleporter
+                            eBlockCoords = { layer: l, r: r, c: c }; // Store E block coordinates
                         } else if (char === 'L') {
                             const geometry = new THREE.BoxGeometry(BLOCK_SIZE * 0.8, WALL_HEIGHT * 0.2, BLOCK_SIZE * 0.8);
                             const cube = new THREE.Mesh(geometry, teleporterOutMaterial);
@@ -691,8 +701,8 @@
                 }
             }
 
-            if (onTeleporter) {
-                if (onTeleporter.type === 'L' && keyboard['Space']) {
+            if (onTeleporter && keyboard['Space']) {
+                if (onTeleporter.type === 'L') {
                     const targetTeleporter = teleporters.find(t => t.type === 'l' && t.layer === player.currentLayer + 1);
                     if (targetTeleporter) {
                         player.currentLayer++;
@@ -700,38 +710,44 @@
                         player.position.z = targetTeleporter.mesh.position.z;
                         player.position.y = player.currentLayer * WALL_HEIGHT;
                         playerBody.position.y = player.currentLayer * WALL_HEIGHT;
-                        keyboard['Space'] = false;
+                        keyboard['Space'] = false; // Consume the space key press
+                    }
+                } else if (onTeleporter.type === 'l') {
+                    const targetTeleporter = teleporters.find(t => t.type === 'L' && t.layer === player.currentLayer - 1);
+                    if (targetTeleporter) {
+                        player.currentLayer--;
+                        player.position.x = targetTeleporter.mesh.position.x;
+                        player.position.z = targetTeleporter.mesh.position.z;
+                        player.position.y = player.currentLayer * WALL_HEIGHT;
+                        playerBody.position.y = player.currentLayer * WALL_HEIGHT;
+                        keyboard['Space'] = false; // Consume the space key press
+                    }
+                } else if (onTeleporter.type === 'S') {
+                    // Teleport from S to E
+                    if (eBlockCoords.layer !== -1) { // Ensure E block exists
+                        player.currentLayer = eBlockCoords.layer;
+                        player.position.x = eBlockCoords.c * BLOCK_SIZE - offsetX + BLOCK_SIZE / 2;
+                        player.position.z = eBlockCoords.r * BLOCK_SIZE - offsetZ + BLOCK_SIZE / 2;
+                        player.position.y = player.currentLayer * WALL_HEIGHT;
+                        playerBody.position.y = player.currentLayer * WALL_HEIGHT;
+                        keyboard['Space'] = false; // Consume the space key press
+                        console.log("Teleported from S to E.");
+                    }
+                } else if (onTeleporter.type === 'E') {
+                    // Teleport from E to S
+                    if (sBlockCoords.layer !== -1) { // Ensure S block exists
+                        player.currentLayer = sBlockCoords.layer;
+                        player.position.x = sBlockCoords.c * BLOCK_SIZE - offsetX + BLOCK_SIZE / 2;
+                        player.position.z = sBlockCoords.r * BLOCK_SIZE - offsetZ + BLOCK_SIZE / 2;
+                        player.position.y = player.currentLayer * WALL_HEIGHT;
+                        playerBody.position.y = player.currentLayer * WALL_HEIGHT;
+                        keyboard['Space'] = false; // Consume the space key press
+                        console.log("Teleported from E to S.");
                     }
                 }
-            }
-
-            // The 'E' block logic for teleporting back to start.
-            // This assumes 'E' is on the last layer (mazeDepth - 1).
-            // We need to find the coordinates of 'E' from the received mazeData.
-            let endGridC = -1, endGridR = -1;
-            if (mazeData.length > 0) { // Ensure mazeData is loaded
-                const lastLayer = mazeData[mazeDepth - 1];
-                for (let r = 0; r < lastLayer.length; r++) {
-                    for (let c = 0; c < lastLayer[r].length; c++) {
-                        if (lastLayer[r][c] === 'E') {
-                            endGridR = r;
-                            endGridC = c;
-                            break;
-                        }
-                    }
-                    if (endGridR !== -1) break;
-                }
-            }
-
-
-            if (player.currentLayer === mazeDepth - 1 &&
-                playerGridR === endGridR &&
-                playerGridC === endGridC) {
-                console.log("Reached 'E' block. Teleporting to start.");
-                // Player position and layer will be reset by the server's respawn message
-                // No client-side teleportation here, server will handle it.
             }
         }
+
 
         function shootBullet() {
             const bulletGeometry = new THREE.SphereGeometry(BULLET_RADIUS, 8, 8);
@@ -802,13 +818,14 @@
                                 if (distance < BULLET_RADIUS + OTHER_PLAYER_RADIUS_CYLINDER) {
                                     console.log(`Bullet from ${bullet.shooterId} hit ${id}!`);
                                     if (ws && ws.readyState === WebSocket.OPEN) {
+                                        console.log(`Client sending player_hit for target_id: ${otherPlayer.id}`);
                                         ws.send(JSON.stringify({
                                             type: "player_hit",
-                                            target_id: id,
+                                            target_id: otherPlayer.id
                                         }));
                                     }
                                     hit = true;
-                                    break;
+                                    break; // Bullet is destroyed, move to next bullet
                                 }
                             }
                         }
@@ -821,6 +838,7 @@
                             if (distance < BULLET_RADIUS + player.radius) {
                                 console.log(`Bullet from ${bullet.shooterId} hit ME (${myPlayerId})!`);
                                 if (ws && ws.readyState === WebSocket.OPEN) {
+                                    console.log(`Client sending player_hit for target_id: ${myPlayerId}`);
                                     ws.send(JSON.stringify({
                                         type: "player_hit",
                                         target_id: myPlayerId,
@@ -965,6 +983,7 @@ Here is information about adjacent layers (if applicable):
 ${adjacentLayerInfo}
 
 'S' is start, 'E' is exit, '#' is a wall, ' ' is a path, 'L' is a teleport out (to next layer), 'l' is a teleport in (from previous layer).
+'S' and 'E' are now also teleporters that can take you between them.
 Teleporters allow you to move between layers.
 
 Provide a concise, helpful hint to guide the player towards the exit. Do not give the full solution. Focus on the next immediate step or direction, or suggest looking for a teleporter if appropriate. Keep it under 50 words.`;
@@ -1020,9 +1039,9 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
                     if (char === '#') {
                         color = '#8B4513';
                     } else if (char === 'S') {
-                        color = '#00FF00';
+                        color = '#00BFFF'; // Minimap S color also changed to Deep Sky Blue
                     } else if (char === 'E') {
-                        color = '#FF0000';
+                        color = '#8A2BE2'; // Minimap E color also changed to Blue Violet
                     } else if (char === 'L') {
                         color = '#00BFFF';
                     } else if (char === 'l') {
@@ -1034,23 +1053,25 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
                 }
             }
 
-            for (const id in otherPlayers) {
-                const otherPlayer = otherPlayers[id];
-                if (otherPlayer.layer === player.currentLayer) {
-                    const otherPlayerGridC = Math.floor((otherPlayer.position.x + offsetX) / BLOCK_SIZE);
-                    const otherPlayerGridR = Math.floor((otherPlayer.position.z + offsetZ) / BLOCK_SIZE);
+            // --- REMOVED OTHER PLAYER ICONS FROM MINIMAP ---
+            // for (const id in otherPlayers) {
+            //     const otherPlayer = otherPlayers[id];
+            //     if (otherPlayer.layer === player.currentLayer) {
+            //         const otherPlayerGridC = Math.floor((otherPlayer.position.x + offsetX) / BLOCK_SIZE);
+            //         const otherPlayerGridR = Math.floor((otherPlayer.position.z + offsetZ) / BLOCK_SIZE);
 
-                    minimapCtx.fillStyle = otherPlayer.color || 'blue';
-                    minimapCtx.beginPath();
-                    minimapCtx.arc(
-                        otherPlayerGridC * MINIMAP_TILE_SIZE + MINIMAP_TILE_SIZE / 2,
-                        otherPlayerGridR * MINIMAP_TILE_SIZE + MINIMAP_TILE_SIZE / 2,
-                        MINIMAP_TILE_SIZE / 3,
-                        0, Math.PI * 2
-                    );
-                    minimapCtx.fill();
-                }
-            }
+            //         minimapCtx.fillStyle = otherPlayer.color || 'blue';
+            //         minimapCtx.beginPath();
+            //         minimapCtx.arc(
+            //             otherPlayerGridC * MINIMAP_TILE_SIZE + MINIMAP_TILE_SIZE / 2,
+            //             otherPlayerGridR * MINIMAP_TILE_SIZE + MINIMAP_TILE_SIZE / 2,
+            //             MINIMAP_TILE_SIZE / 3,
+            //             0, Math.PI * 2
+            //         );
+            //         minimapCtx.fill();
+            //     }
+            // }
+            // --- END REMOVED OTHER PLAYER ICONS ---
 
             const playerGridC = Math.floor((player.position.x + offsetX) / BLOCK_SIZE);
             const playerGridR = Math.floor((player.position.z + offsetZ) / BLOCK_SIZE);
@@ -1065,24 +1086,26 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
             );
             minimapCtx.fill();
 
-            minimapCtx.strokeStyle = 'white';
-            minimapCtx.lineWidth = 2;
-            minimapCtx.beginPath();
-            const playerCenterX = playerGridC * MINIMAP_TILE_SIZE + MINIMAP_TILE_SIZE / 2;
-            const playerCenterY = playerGridR * MINIMAP_TILE_SIZE + MINIMAP_TILE_SIZE / 2;
-            minimapCtx.moveTo(playerCenterX, playerCenterY);
+            // --- REMOVED MINIMAP DIRECTION LINE ---
+            // minimapCtx.strokeStyle = 'white';
+            // minimapCtx.lineWidth = 2;
+            // minimapCtx.beginPath();
+            // const playerCenterX = playerGridC * MINIMAP_TILE_SIZE + MINIMAP_TILE_SIZE / 2;
+            // const playerCenterY = playerGridR * MINIMAP_TILE_SIZE + MINIMAP_TILE_SIZE / 2;
+            // minimapCtx.moveTo(playerCenterX, playerCenterY);
 
-            const forwardVector = new THREE.Vector3();
-            playerBody.getWorldDirection(forwardVector);
-            forwardVector.y = 0;
-            forwardVector.normalize();
+            // const forwardVector = new THREE.Vector3();
+            // playerBody.getWorldDirection(forwardVector);
+            // forwardVector.y = 0;
+            // forwardVector.normalize();
 
-            const arrowLength = MINIMAP_TILE_SIZE / 2;
-            minimapCtx.lineTo(
-                playerCenterX + forwardVector.x * arrowLength,
-                playerCenterY - forwardVector.z * arrowLength
-            );
-            minimapCtx.stroke();
+            // const arrowLength = MINIMAP_TILE_SIZE / 2;
+            // minimapCtx.lineTo(
+            //     playerCenterX + forwardVector.x * arrowLength,
+            //     playerCenterY - forwardVector.z * arrowLength
+            // );
+            // minimapCtx.stroke();
+            // --- END REMOVED MINIMAP DIRECTION LINE ---
         }
 
 
@@ -1145,7 +1168,6 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
                                    new THREE.Vector3(data.start_position.x, data.start_position.y, data.start_position.z),
                                    new THREE.Vector3(data.end_position.x, data.end_position.y, data.end_position.z));
 
-                        // --- FIX STARTS HERE ---
                         // Initialize my own player's state directly from data.start_position
                         player.position.set(data.start_position.x, data.start_position.y, data.start_position.z);
                         player.currentLayer = 0; // Server sends layer 0 for start
@@ -1158,7 +1180,6 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
 
                         updateHealthDisplay();
                         updateScoreDisplay();
-                        // --- FIX ENDS HERE ---
 
                         data.players.forEach(p => {
                             if (p.player_id !== myPlayerId) { // Only add other players
@@ -1189,7 +1210,7 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
                             createOtherPlayerBullet(data);
                         }
                     } else if (data.type === "game_win") {
-                        showMessageBox(`${data.winner_id} found the exit!`, "win");
+                        // Removed showMessageBox(`${data.winner_id} found the exit!`, "win"); as requested
                         document.exitPointerLock();
                     } else if (data.type === "health_update") {
                         const targetPlayerId = data.target_id;
