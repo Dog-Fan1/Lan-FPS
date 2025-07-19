@@ -808,31 +808,38 @@
                 }
 
                 if (!hit) {
-                    if (bullet.shooterId === myPlayerId) {
+                    if (String(bullet.shooterId) === myPlayerId) { // Ensure comparison with string ID
                         for (const id in otherPlayers) {
-                            if (id === myPlayerId) continue;
+                            const currentId = String(id); // Ensure ID is treated as a string
+                            if (currentId === myPlayerId) continue; // Skip myself (already handled by otherPlayers check)
+                            const otherPlayer = otherPlayers[currentId]; // Access with string ID
 
-                            const otherPlayer = otherPlayers[id];
                             if (otherPlayer.layer === bulletLayer) {
                                 const otherPlayerCenter = otherPlayer.mesh.position.clone();
                                 otherPlayerCenter.y = bullet.mesh.position.y;
                                 const distance = bullet.mesh.position.distanceTo(otherPlayerCenter);
 
                                 if (distance < BULLET_RADIUS + OTHER_PLAYER_RADIUS_CYLINDER) {
-                                    console.log(`Bullet from ${bullet.shooterId} hit ${id}!`);
+                                    console.log(`Bullet from ${bullet.shooterId} hit ${currentId}!`);
                                     if (ws && ws.readyState === WebSocket.OPEN) {
-                                        console.log(`Client sending player_hit for target_id: ${otherPlayer.id}`);
-                                        ws.send(JSON.stringify({
-                                            type: "player_hit",
-                                            target_id: otherPlayer.id
-                                        }));
+                                        // **IMPORTANT: Add validation before sending player_hit**
+                                        if (myPlayerId && currentId) { // Ensure both IDs are valid
+                                            console.log(`Client sending player_hit for target_id: ${currentId}, shooter_id: ${myPlayerId}`);
+                                            ws.send(JSON.stringify({
+                                                type: "player_hit",
+                                                target_id: currentId,
+                                                shooter_id: myPlayerId // Explicitly send shooter_id from client
+                                            }));
+                                        } else {
+                                            console.error(`Attempted to send player_hit with invalid IDs. myPlayerId: ${myPlayerId}, target_id: ${currentId}`);
+                                        }
                                     }
                                     hit = true;
                                     break; // Bullet is destroyed, move to next bullet
                                 }
                             }
                         }
-                    } else {
+                    } else { // This is another player's bullet
                         if (bulletLayer === player.currentLayer) {
                             const playerCenter = playerBody.position.clone();
                             playerCenter.y = bullet.mesh.position.y;
@@ -841,11 +848,17 @@
                             if (distance < BULLET_RADIUS + player.radius) {
                                 console.log(`Bullet from ${bullet.shooterId} hit ME (${myPlayerId})!`);
                                 if (ws && ws.readyState === WebSocket.OPEN) {
-                                    console.log(`Client sending player_hit for target_id: ${myPlayerId}`);
-                                    ws.send(JSON.stringify({
-                                        type: "player_hit",
-                                        target_id: myPlayerId,
-                                    }));
+                                    // **IMPORTANT: Add validation before sending player_hit**
+                                    if (myPlayerId && bullet.shooterId) { // Ensure both IDs are valid
+                                        console.log(`Client sending player_hit for target_id: ${myPlayerId}, shooter_id: ${bullet.shooterId}`);
+                                        ws.send(JSON.stringify({
+                                            type: "player_hit",
+                                            target_id: myPlayerId,
+                                            shooter_id: bullet.shooterId // Explicitly send shooter_id from bullet data
+                                        }));
+                                    } else {
+                                        console.error(`Attempted to send player_hit with invalid IDs. myPlayerId: ${myPlayerId}, shooter_id: ${bullet.shooterId}`);
+                                    }
                                 }
                                 hit = true;
                             }
@@ -873,7 +886,7 @@
                 direction: direction,
                 speed: BULLET_SPEED,
                 spawnTime: Date.now(),
-                shooterId: bulletData.shooter_id
+                shooterId: String(bulletData.shooter_id) // Ensure shooterId is stored as string
             });
             scene.add(bullet);
         }
@@ -1164,7 +1177,7 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
                     console.log("Received parsed message:", data);
 
                     if (data.type === "init") {
-                        myPlayerId = data.player_id;
+                        myPlayerId = String(data.player_id); // Ensure myPlayerId is a string
                         console.log(`My player ID: ${myPlayerId}`);
                         // Create maze based on server data
                         createMaze(data.maze_data,
@@ -1185,7 +1198,7 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
                         updateScoreDisplay();
 
                         data.players.forEach(p => {
-                            if (p.player_id !== myPlayerId) { // Only add other players
+                            if (String(p.player_id) !== myPlayerId) { // Compare with string ID
                                 addOtherPlayer(p);
                             }
                         });
@@ -1199,24 +1212,24 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
                         console.log("  player.currentLayer:", player.currentLayer);
 
                     } else if (data.type === "player_connected") {
-                        if (data.player_id !== myPlayerId) {
+                        if (String(data.player_id) !== myPlayerId) { // Compare with string ID
                             addOtherPlayer(data);
                         }
                     } else if (data.type === "player_update") {
-                        if (data.player_id !== myPlayerId) {
+                        if (String(data.player_id) !== myPlayerId) { // Compare with string ID
                             updateOtherPlayer(data);
                         }
                     } else if (data.type === "player_disconnected") {
-                        removeOtherPlayer(data.player_id);
+                        removeOtherPlayer(String(data.player_id)); // Remove with string ID
                     } else if (data.type === "bullet_fired") {
-                        if (data.shooter_id !== myPlayerId) {
+                        if (String(data.shooter_id) !== myPlayerId) { // Compare with string ID
                             createOtherPlayerBullet(data);
                         }
                     } else if (data.type === "game_win") {
                         // Removed showMessageBox(`${data.winner_id} found the exit!`, "win"); as requested
                         document.exitPointerLock();
                     } else if (data.type === "health_update") {
-                        const targetPlayerId = data.target_id;
+                        const targetPlayerId = String(data.target_id); // Ensure targetPlayerId is string
                         const newHealth = data.new_health;
                         const newScore = data.score;
 
@@ -1226,7 +1239,7 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
                             updateHealthDisplay();
                             updateScoreDisplay();
                         } else {
-                            const otherPlayer = otherPlayers[targetPlayerId];
+                            const otherPlayer = otherPlayers[targetPlayerId]; // Access with string ID
                             if (otherPlayer) {
                                 otherPlayer.health = newHealth;
                                 otherPlayer.score = newScore;
@@ -1235,23 +1248,23 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
                             }
                         }
                     } else if (data.type === "score_update") {
-                        const targetPlayerId = data.player_id;
+                        const targetPlayerId = String(data.player_id); // Ensure targetPlayerId is string
                         const newScore = data.new_score;
 
                         if (targetPlayerId === myPlayerId) {
                             player.score = newScore;
                             updateScoreDisplay();
                         } else {
-                            const otherPlayer = otherPlayers[targetPlayerId];
+                            const otherPlayer = otherPlayers[targetPlayerId]; // Access with string ID
                             if (otherPlayer) {
                                 otherPlayer.score = newScore;
                             }
                         }
                     }
                     else if (data.type === "player_defeated") {
-                        const defeatedPlayerId = data.player_id;
+                        const defeatedPlayerId = String(data.player_id); // Ensure defeatedPlayerId is string
                         const finalScore = data.final_score;
-                        const killerId = data.killer_id;
+                        const killerId = String(data.killer_id); // Ensure killerId is string
 
                         if (defeatedPlayerId === myPlayerId) {
                             player.health = 0; // Ensure health is 0 for display
@@ -1265,7 +1278,7 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
                             console.log(`Player ${defeatedPlayerId} was defeated by ${killerId}! Final Score: ${finalScore}`);
                         }
                     } else if (data.type === "player_respawned") {
-                        const respawnedPlayerId = data.player_id;
+                        const respawnedPlayerId = String(data.player_id); // Ensure respawnedPlayerId is string
                         if (respawnedPlayerId === myPlayerId) {
                             // This is MY player respawning. Update local player state directly.
                             player.position.set(data.position.x, data.position.y, data.position.z);
@@ -1319,10 +1332,15 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
         }
 
         function addOtherPlayer(playerData) {
-            if (otherPlayers[playerData.player_id]) {
+            const playerIdString = String(playerData.player_id); // Convert to string
+
+            if (otherPlayers[playerIdString]) {
+                console.log(`Player ${playerIdString} already exists, updating instead of adding.`);
                 updateOtherPlayer(playerData);
                 return;
             }
+
+            console.log(`Attempting to add new player mesh for ID: ${playerIdString}`);
 
             const geometry = new THREE.CylinderGeometry(
                 OTHER_PLAYER_RADIUS_CYLINDER,
@@ -1347,7 +1365,7 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
             scene.add(healthBar);
 
 
-            otherPlayers[playerData.player_id] = {
+            otherPlayers[playerIdString] = { // Use string ID as key
                 mesh: mesh,
                 healthBar: healthBar,
                 position: new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z),
@@ -1357,14 +1375,17 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
                 health: playerData.health || MAX_HEALTH,
                 score: playerData.score || 0
             };
-            console.log(`Added other player: ${playerData.player_id}`);
+            console.log(`Successfully added player mesh for ID: ${playerIdString}`);
 
-            updateOtherPlayerHealthBar(otherPlayers[playerData.player_id]);
+            updateOtherPlayerHealthBar(otherPlayers[playerIdString]);
         }
 
         function updateOtherPlayer(playerData) {
-            const otherPlayer = otherPlayers[playerData.player_id];
+            const playerIdString = String(playerData.player_id); // Convert to string
+            const otherPlayer = otherPlayers[playerIdString]; // Access with string ID
+
             if (otherPlayer) {
+                console.log(`Attempting to update player mesh for ID: ${playerIdString}`);
                 otherPlayer.mesh.position.set(playerData.position.x, playerData.layer * WALL_HEIGHT + OTHER_PLAYER_HEIGHT / 2, playerData.position.z);
                 otherPlayer.mesh.rotation.set(playerData.rotation.x, playerData.rotation.y, playerData.rotation.z);
                 otherPlayer.layer = playerData.layer;
@@ -1383,6 +1404,10 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
                 otherPlayer.healthBar.lookAt(camera.position);
 
                 updateOtherPlayerHealthBar(otherPlayer);
+                console.log(`Successfully updated player mesh for ID: ${playerIdString}`);
+            } else {
+                console.warn(`Attempted to update non-existent player: ${playerIdString}. Adding instead.`);
+                addOtherPlayer(playerData); // If somehow update is called before add, add it.
             }
         }
 
@@ -1407,20 +1432,23 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
 
 
         function removeOtherPlayer(playerId) {
-            const otherPlayer = otherPlayers[playerId];
+            const playerIdString = String(playerId); // Convert to string
+            const otherPlayer = otherPlayers[playerIdString]; // Access with string ID
             if (otherPlayer) {
+                console.log(`Attempting to remove player mesh for ID: ${playerIdString}`);
                 scene.remove(otherPlayer.mesh);
                 if (otherPlayer.healthBar) {
                     scene.remove(otherPlayer.healthBar);
                 }
-                delete otherPlayers[playerId];
-                console.log(`Removed other player: ${playerId}`);
+                delete otherPlayers[playerIdString]; // Delete with string ID
+                console.log(`Successfully removed player: ${playerIdString}`);
             }
         }
 
         function updateOtherPlayers() {
             for (const id in otherPlayers) {
-                const otherPlayer = otherPlayers[id];
+                const currentId = String(id); // Ensure ID is treated as a string
+                const otherPlayer = otherPlayers[currentId]; // Access with string ID
                 if (otherPlayer.healthBar) {
                     otherPlayer.healthBar.lookAt(camera.position);
                 }
@@ -1457,3 +1485,4 @@ Provide a concise, helpful hint to guide the player towards the exit. Do not giv
     </script>
 </body>
 </html>
+
