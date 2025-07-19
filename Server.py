@@ -592,6 +592,25 @@ async def handle_player_reached_end(websocket):
     else:
         print(f"Player {player_id} sent 'player_reached_end' but is not at the end block.")
 
+async def handle_chat_message(websocket, data):
+    """Handles an incoming chat message and broadcasts it to all players."""
+    player_data = PLAYERS.get(websocket)
+    if not player_data:
+        return
+
+    message_content = data.get("message")
+    if not isinstance(message_content, str) or not message_content:
+        print(f"Invalid chat message from {player_data['id']}: {data}")
+        return
+
+    chat_message = {
+        "type": "chat_message",
+        "sender_id": player_data["id"],
+        "message": message_content
+    }
+    print(f"Chat message from {player_data['id']}: {message_content}")
+    await broadcast(chat_message)
+
 
 async def handle_client_messages(websocket):
     """Handles incoming messages from a connected client."""
@@ -613,6 +632,8 @@ async def handle_client_messages(websocket):
                 await handle_teleport_to_start(websocket)
             elif data["type"] == "player_reached_end":
                 await handle_player_reached_end(websocket)
+            elif data["type"] == "chat_message": # NEW: Handle chat messages
+                await handle_chat_message(websocket, data)
             else:
                 print(f"Unknown message type: {data['type']}")
     except websockets.exceptions.ConnectionClosedOK:
